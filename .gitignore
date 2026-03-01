@@ -43,3 +43,22 @@ next-env.d.ts
 
 # Vercel
 .vercel
+
+# ─── Python / Django ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/.venv/
+backend/venv/
+backend/staticfiles/
+backend/media/
+backend/*.egg-info/
+backend/dist/
+backend/.eggs/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/db.sqlite3
+
