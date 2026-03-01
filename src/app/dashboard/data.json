@@ -1,0 +1,17 @@
+﻿[
+  {"id":1,"header":"Almaty Central","type":"Ground Sensor","status":"In Process","target":"142","limit":"100","reviewer":"Asel Nurova"},
+  {"id":2,"header":"Almaty Industrial Zone","type":"Roadside Monitor","status":"Done","target":"198","limit":"100","reviewer":"Asel Nurova"},
+  {"id":3,"header":"Bishkek North","type":"Ground Sensor","status":"Done","target":"114","limit":"100","reviewer":"Damir Isaev"},
+  {"id":4,"header":"Bishkek South Ring","type":"Roadside Monitor","status":"In Process","target":"163","limit":"100","reviewer":"Damir Isaev"},
+  {"id":5,"header":"Tashkent Downtown","type":"Ground Sensor","status":"Done","target":"128","limit":"100","reviewer":"Nilufar Rashidova"},
+  {"id":6,"header":"Tashkent Airport Corridor","type":"Satellite Node","status":"Done","target":"97","limit":"100","reviewer":"Nilufar Rashidova"},
+  {"id":7,"header":"Nur-Sultan Central Park","type":"Ground Sensor","status":"Done","target":"54","limit":"100","reviewer":"Bakyt Seitkali"},
+  {"id":8,"header":"Nur-Sultan Industrial","type":"Roadside Monitor","status":"In Process","target":"87","limit":"100","reviewer":"Bakyt Seitkali"},
+  {"id":9,"header":"Shymkent Central","type":"Ground Sensor","status":"Done","target":"119","limit":"100","reviewer":"Arman Bekuov"},
+  {"id":10,"header":"Shymkent Highway M-39","type":"Roadside Monitor","status":"Done","target":"135","limit":"100","reviewer":"Arman Bekuov"},
+  {"id":11,"header":"Dushanbe City Center","type":"Ground Sensor","status":"Done","target":"87","limit":"100","reviewer":"Zafar Rahimov"},
+  {"id":12,"header":"Dushanbe Eastern District","type":"Satellite Node","status":"In Process","target":"102","limit":"100","reviewer":"Zafar Rahimov"},
+  {"id":13,"header":"Almaty Mountain Baseline","type":"Satellite Node","status":"Done","target":"38","limit":"100","reviewer":"Asel Nurova"},
+  {"id":14,"header":"Fergana Valley Station","type":"Ground Sensor","status":"Done","target":"156","limit":"100","reviewer":"Nilufar Rashidova"},
+  {"id":15,"header":"Aral Sea Reference","type":"Satellite Node","status":"Done","target":"63","limit":"100","reviewer":"Bakyt Seitkali"}
+]
