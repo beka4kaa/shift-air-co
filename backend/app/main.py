@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -30,10 +31,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# Paths — relative to backend/ where uvicorn is launched
+# Paths
+# Railway: mount a Volume at /data and set MODEL_URL env var.
+# Local dev: artifacts live in backend/artifacts/
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../backend/
-ARTIFACTS_DIR = BASE_DIR / "artifacts"
+
+_VOLUME_DIR = Path("/data")
+_LOCAL_DIR = BASE_DIR / "artifacts"
+# Prefer /data if it exists (Railway Volume), otherwise fall back to local
+ARTIFACTS_DIR = _VOLUME_DIR if _VOLUME_DIR.is_dir() else _LOCAL_DIR
+
 MODEL_PATH = ARTIFACTS_DIR / "bishkek_pm25_catboost.cbm"
 FEATURES_PATH = ARTIFACTS_DIR / "feature_columns.json"
 
@@ -47,6 +55,38 @@ _state: dict[str, Any] = {
     "feature_columns": None,
     "load_error": None,
 }
+
+
+def _ensure_model_downloaded() -> None:
+    """
+    If MODEL_PATH does not exist, download the model from MODEL_URL env var.
+    Skipped silently when MODEL_URL is not set (local dev without model).
+    """
+    model_url = os.environ.get("MODEL_URL", "").strip()
+    if MODEL_PATH.exists():
+        logger.info("✅ Model file already present at %s", MODEL_PATH)
+        return
+    if not model_url:
+        logger.warning(
+            "⚠️  Model not found at %s and MODEL_URL is not set — skipping download",
+            MODEL_PATH,
+        )
+        return
+
+    logger.info("⬇️  Downloading model from %s ...", model_url)
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with httpx.stream("GET", model_url, follow_redirects=True, timeout=120) as r:
+            r.raise_for_status()
+            with open(MODEL_PATH, "wb") as f:
+                for chunk in r.iter_bytes(chunk_size=1024 * 256):
+                    f.write(chunk)
+        logger.info("✅ Model downloaded → %s (%d bytes)", MODEL_PATH, MODEL_PATH.stat().st_size)
+    except Exception as exc:  # noqa: BLE001
+        # Don't crash the server — /health will report the missing model
+        logger.error("❌ Model download failed: %s", exc)
+        if MODEL_PATH.exists():
+            MODEL_PATH.unlink()  # remove partial file
 
 
 def _load_artifacts() -> None:
@@ -82,6 +122,7 @@ def _load_artifacts() -> None:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _ensure_model_downloaded()  # download from MODEL_URL if not on Volume
     _load_artifacts()
     yield
     # cleanup (nothing to do for catboost)
