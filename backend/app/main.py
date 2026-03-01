@@ -21,7 +21,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -150,7 +150,7 @@ class HealthResponse(BaseModel):
     ok: bool
     model_loaded: bool
     artifacts_present: bool
-    error: str | None = None
+    error: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

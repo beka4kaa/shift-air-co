@@ -67,5 +67,6 @@ backend/artifacts/*.cbm
 backend/artifacts/*.pkl
 backend/artifacts/*.bin
 backend/artifacts/*.joblib
+backend/artifacts/feature_columns.json
 # keep placeholder text file committed
 !backend/artifacts/PUT_MODEL_HERE.txt
