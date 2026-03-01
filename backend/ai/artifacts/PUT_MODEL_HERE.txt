@@ -1,0 +1,1 @@
+Put bishkek_pm25_catboost.cbm and feature_columns.json in this folder.

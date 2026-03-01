@@ -1,0 +1,10 @@
+Place the following model artifacts in this directory:
+
+  1. bishkek_pm25_catboost.cbm   — trained CatBoost model file
+  2. feature_columns.json        — list of feature column names used during training
+
+Example feature_columns.json shape:
+  ["hour", "day_of_week", "month", "temperature", "humidity", "wind_speed", "pressure"]
+
+These files are NOT committed to git (see .gitignore).
+After placing them here, restart the server — the model is loaded once at startup.
