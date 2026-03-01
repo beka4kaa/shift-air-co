@@ -67,6 +67,9 @@ backend/artifacts/*.cbm
 backend/artifacts/*.pkl
 backend/artifacts/*.bin
 backend/artifacts/*.joblib
-backend/artifacts/feature_columns.json
-# keep placeholder text file committed
+# training temp dirs
+backend/artifacts/bishkek_smog_predictor/
+backend/artifacts/catboost_info/
+# keep placeholder and feature columns committed (small JSON, not a binary)
 !backend/artifacts/PUT_MODEL_HERE.txt
+!backend/artifacts/feature_columns.json
