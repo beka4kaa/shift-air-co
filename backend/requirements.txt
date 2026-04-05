@@ -5,6 +5,10 @@ httpx==0.28.1
 catboost==1.2.7
 pandas==2.2.3
 numpy==1.26.4
+requests>=2.31
+scikit-learn>=1.4
+pyarrow>=14.0
+
 
 # ── Django REST API (auth + AQI CRUD — kept for reference / local use) ────────
 Django==5.0.4

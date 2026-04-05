@@ -1,15 +1,43 @@
+"""
+Bishkek Smog Predictor API (FastAPI)
+====================================
+GET  /health    — liveness + artifact check
+GET  /forecast  — multi-day PM2.5 forecast using CatBoost + Open-Meteo weather
+
+Uses the shared `smog` package for feature engineering and Open-Meteo helpers.
+"""
+
 from __future__ import annotations
 
+# Ensure project root is on sys.path so `import smog` works when running
+# from backend/ai/ directory (e.g. `cd backend/ai && uvicorn app.main:app`)
+import sys
+from pathlib import Path as _Path
+
+_PROJECT_ROOT = _Path(__file__).resolve().parents[3]  # backend/ai/app/main.py → project root
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
-import requests
 from catboost import CatBoostRegressor
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
+# ── shared smog package ──────────────────────────────────────────────────────
+from smog.config import LOC, FORECAST_WEATHER_URL
+from smog.open_meteo import get_json
+from smog.features import add_time_features, add_wind_dir_encoding
+
+logger = logging.getLogger("smog_ai_api")
+
+# ── Artifact paths ───────────────────────────────────────────────────────────
 APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
 ARTIFACTS_DIR = BACKEND_DIR / "artifacts"
@@ -17,15 +45,18 @@ ARTIFACTS_DIR = BACKEND_DIR / "artifacts"
 MODEL_PATH = ARTIFACTS_DIR / "bishkek_pm25_catboost.cbm"
 FEATS_PATH = ARTIFACTS_DIR / "feature_columns.json"
 
-# Bishkek
-LAT = 42.87
-LON = 74.59
-TZ = "Asia/Bishkek"
-FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+app = FastAPI(title="Bishkek Smog Predictor API", version="2.0")
 
-app = FastAPI(title="Bishkek Smog Predictor API", version="1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
+# ── Load model ───────────────────────────────────────────────────────────────
 def _load_artifacts():
     if not MODEL_PATH.exists():
         raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
@@ -48,34 +79,13 @@ except Exception as e:
     STARTUP_ERROR = str(e)
 
 
-def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    d = pd.to_datetime(out["date"])
-    out["dow"] = d.dt.dayofweek
-    out["month"] = d.dt.month
-    out["dayofyear"] = d.dt.dayofyear
-    out["doy_sin"] = np.sin(2 * np.pi * out["dayofyear"] / 365.25)
-    out["doy_cos"] = np.cos(2 * np.pi * out["dayofyear"] / 365.25)
-    out["is_weekend"] = (out["dow"] >= 5).astype(int)
-    out["heating_season"] = out["month"].isin([10, 11, 12, 1, 2, 3]).astype(int)
-    return out
-
-
-def add_wind_dir_encoding(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    for col in ["wind_dir_mean_day", "wind_dir_mean_night"]:
-        if col in out.columns:
-            rad = np.deg2rad(pd.to_numeric(out[col], errors="coerce").fillna(0))
-            out[col + "_sin"] = np.sin(rad)
-            out[col + "_cos"] = np.cos(rad)
-    return out
-
-
+# ── Weather forecast (reuses smog.open_meteo) ────────────────────────────────
 def fetch_forecast_hourly(days: int) -> pd.DataFrame:
+    """Fetch hourly weather forecast from Open-Meteo via shared client."""
     params = {
-        "latitude": LAT,
-        "longitude": LON,
-        "timezone": TZ,
+        "latitude": LOC.latitude,
+        "longitude": LOC.longitude,
+        "timezone": LOC.timezone,
         "forecast_days": max(1, min(16, days)),
         "hourly": ",".join([
             "temperature_2m",
@@ -89,46 +99,19 @@ def fetch_forecast_hourly(days: int) -> pd.DataFrame:
             "wind_gusts_10m",
         ]),
     }
-    r = requests.get(FORECAST_URL, params=params, timeout=30)
-    r.raise_for_status()
-    js = r.json()
-    h = js["hourly"]
-    df = pd.DataFrame(h)
+    js = get_json(FORECAST_WEATHER_URL, params=params)
+    df = pd.DataFrame(js["hourly"])
     df["time"] = pd.to_datetime(df["time"])
     return df
 
 
 def hourly_to_daily_weather_forecast(df_h: pd.DataFrame) -> pd.DataFrame:
-    df = df_h.copy()
-    df["date"] = df["time"].dt.date
-    is_night = (df["time"].dt.hour <= 7) | (df["time"].dt.hour >= 20)
+    """Aggregate hourly forecast → daily (day/night split).
 
-    def agg_block(x: pd.DataFrame, suffix: str) -> pd.DataFrame:
-        g = x.groupby("date").agg(
-            temp_mean=("temperature_2m", "mean"),
-            temp_min=("temperature_2m", "min"),
-            temp_max=("temperature_2m", "max"),
-            rh_mean=("relative_humidity_2m", "mean"),
-            rh_max=("relative_humidity_2m", "max"),
-            pressure_mean=("surface_pressure", "mean"),
-            wind_mean=("wind_speed_10m", "mean"),
-            wind_max=("wind_speed_10m", "max"),
-            gust_max=("wind_gusts_10m", "max"),
-            wind_dir_mean=("wind_direction_10m", "mean"),
-            precip_sum=("precipitation", "sum"),
-            rain_sum=("rain", "sum"),
-            snowfall_sum=("snowfall", "sum"),
-        ).reset_index()
-        g = g.rename(columns={c: f"{c}{suffix}" for c in g.columns if c != "date"})
-        return g
-
-    day = agg_block(df[~is_night], "_day")
-    night = agg_block(df[is_night], "_night")
-    out = day.merge(night, on="date", how="outer").sort_values("date")
-    out["temp_range_day"] = out["temp_max_day"] - out["temp_min_day"]
-    out["temp_range_night"] = out["temp_max_night"] - out["temp_min_night"]
-    out["date"] = pd.to_datetime(out["date"])
-    return out
+    Uses the same aggregation logic as smog.ingest.hourly_to_daily_weather.
+    """
+    from smog.ingest import hourly_to_daily_weather
+    return hourly_to_daily_weather(df_h)
 
 
 def pm_status(pm: float) -> str:
@@ -139,6 +122,7 @@ def pm_status(pm: float) -> str:
     return "CLEAN"
 
 
+# ── Routes ───────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
     if not ARTIFACTS_OK:
@@ -149,7 +133,6 @@ def health():
 @app.get("/forecast")
 def forecast(
     days: int = Query(3, ge=1, le=7),
-    # MVP: pass last values from frontend (later: store in DB and update daily)
     pm25_lag1: float = Query(..., description="Yesterday PM2.5 (µg/m³)"),
     pm25_lag2: float = Query(..., description="PM2.5 two days ago (µg/m³)"),
     pm25_lag7: float = Query(..., description="PM2.5 seven days ago (µg/m³)"),
@@ -157,6 +140,11 @@ def forecast(
     pm25_roll7: float = Query(..., description="Mean PM2.5 last 7 days"),
     pm25_roll14: float = Query(..., description="Mean PM2.5 last 14 days"),
 ):
+    """Multi-day PM2.5 forecast for Bishkek.
+
+    Fetches weather forecast from Open-Meteo, builds features using the
+    shared `smog` package, and runs CatBoost predictions day-by-day.
+    """
     if not ARTIFACTS_OK or model is None:
         raise HTTPException(status_code=500, detail=f"Artifacts not loaded: {STARTUP_ERROR}")
 
@@ -189,14 +177,13 @@ def forecast(
 
         results.append({
             "date": row["date"].strftime("%Y-%m-%d"),
-            "pm25": round(pred, 1),
+            "pm25": round(max(pred, 0.0), 1),
             "status": pm_status(pred),
         })
 
-        # update lags for next step (simple)
+        # update lags for next step
         lag2 = lag1
         lag1 = pred
-        # roll update (MVP approximation)
         roll3 = float(np.mean([roll3, pred]))
         roll7 = float(np.mean([roll7, pred]))
         roll14 = float(np.mean([roll14, pred]))

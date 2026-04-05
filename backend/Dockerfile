@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --prefix=/install --no-cache-dir -r requirements.txt
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
@@ -21,7 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local
-COPY . .
+
+# Copy backend code
+COPY backend/ .
+
+# Copy shared smog package (lives at project root)
+COPY smog/ ./smog/
 
 # Non-root user for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser

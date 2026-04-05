@@ -69,3 +69,13 @@ backend/artifacts/*.bin
 backend/artifacts/*.joblib
 # keep placeholder text file committed
 !backend/artifacts/PUT_MODEL_HERE.txt
+
+# ─── Smog Predictor (PM2.5) ──────────────────────────────────────────────────
+artifacts/
+data/
+*.parquet
+*.cbm
+# ignore generated metrics/features JSON in artifacts (not config)
+artifacts/*.json
+.venv/
+catboost_info/
